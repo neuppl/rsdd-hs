@@ -1,0 +1,46 @@
+cabal-version:   3.4
+name:            rsdd-hs
+version:         0.1.0.0
+synopsis:        Haskell bindings for RSDD (through C interop)
+description:
+  Haskell bindings for RSDD, a rust implementation of decision diagrams (both
+  binary decision diagrams and sentential decision diagrams). RSDD is a
+  efficient, safe, and modern implementation of decision diagrams. Core design
+  concerns include ease of integration, performance, and ease of
+  experimentation. The hope is that this library will be a useful platform for
+  experimentation and iteration on new ideas for these important data
+  structures.
+  These haskell bindings use the C interop exposed in RSDD which assumes static
+  lifetimes for all managers and pointers. For finer granularity with lifetimes,
+  please use RSDD directly.
+
+license:         MIT
+license-file:    LICENSE
+author:          Sam Stites
+maintainer:      Sam Stites <spnony@f.cge.qri>#rot13
+
+-- copyright:
+category:        Data
+build-type:      Simple
+extra-doc-files: CHANGELOG.org
+
+-- Extra source files to be distributed with the package, such as examples, or a tutorial module.
+-- extra-source-files:
+
+common base
+  default-language: GHC2021
+  ghc-options:      -Wall
+  build-depends:    base ^>=4.17.0.0
+
+library
+  import:          base
+  exposed-modules: Foreign.RSDD
+  extra-libraries: rsdd
+  hs-source-dirs:  lib
+
+test-suite rsdd-hs-test
+  import:         base
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  build-depends:  rsdd-hs
