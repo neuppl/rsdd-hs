@@ -3,14 +3,12 @@
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
     haskell-flake.url = "github:srid/haskell-flake";
-    haskell-flake.inputs.nixpkgs.follows = "nixpkgs";
     treefmt-nix.url = "github:numtide/treefmt-nix";
     treefmt-nix.inputs.nixpkgs.follows = "nixpkgs";
 
-    rsdd.url = "github:stites/rsdd/3ff8de49925dd1d626f689e4e0e68e66e95a478d?dir=nix";
-    #nixpkgs.follows = "rsdd/nixpkgs";
+    rsdd.url = "github:stites/rsdd/13c28b4?dir=nix";
+
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
-    #rsdd.url = "path:./rsdd/nix";
     flake-root.url = "github:srid/flake-root";
     mission-control.url = "github:Platonic-Systems/mission-control";
   };
@@ -23,21 +21,26 @@
         inputs.treefmt-nix.flakeModule
         inputs.flake-root.flakeModule
         inputs.mission-control.flakeModule
-
       ];
       perSystem = { inputs', self', system, lib, config, pkgs, ... }: {
-        _module.args.pkgs = import inputs.nixpkgs {
-          inherit system;
-          overlays = [ (_: _: { rsdd = inputs.rsdd.packages.${system}.default.override { inherit (pkgs) rustPlatform; }; }) ];
-        };
         packages = {
           default = self'.packages.rsdd-hs;
-          inherit (pkgs) rsdd;
+          rsdd = inputs.rsdd.packages.${system}.rsdd.overrideAttrs (old: {
+            # getting a lot of thrash on the API -- might as well disable this for now.
+            doCheck = false;
+          });
         };
-
         haskellProjects.default = {
-          basePackages = pkgs.haskell.packages.ghc94;
-          packages = {};
+          basePackages = pkgs.haskell.packages.ghc94.extend (
+            final: prev: {
+              # seems like a dirty hack since this is a rust package...
+              inherit (config.packages) rsdd;
+            }
+          );
+          # NOTE: doesn't seem to work...
+          # settings.rsdd-hs = { ... }: {
+          #   extraBuildDepends = [ config.packages.rsdd ];
+          # };
           devShell = {
             hlsCheck.enable = false;
             tools = hp: {
@@ -78,7 +81,14 @@
           run = {
             description = "Run the project with ghcid auto-recompile";
             exec = ''
-              ghcid -c "cabal repl lib:rsdd-hs --extra-lib-dirs=${pkgs.rsdd}/lib" --warnings
+              ghcid -c "cabal repl lib:rsdd-hs --extra-lib-dirs=${config.packages.rsdd}/lib" --warnings
+            '';
+            category = "Primary";
+          };
+          run-example = {
+            description = "Run the project with ghcid auto-recompile";
+            exec = ''
+              ghcid -c "cabal repl exe:example --extra-lib-dirs=${config.packages.rsdd}/lib" --warnings -T :main
             '';
             category = "Primary";
           };
@@ -92,10 +102,10 @@
             config.flake-root.devShell
             config.mission-control.devShell
           ];
-          nativeBuildInputs = with pkgs; [
-            rsdd
+          nativeBuildInputs = [
+            config.packages.rsdd
           ];
         };
-    };
+      };
     };
 }

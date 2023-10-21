@@ -1,7 +1,7 @@
 cabal-version:   3.4
 name:            rsdd-hs
 version:         0.1.0.0
-synopsis:        Haskell bindings for RSDD (through C interop)
+synopsis:        Haskell bindings for RSDD
 description:
   Haskell bindings for RSDD, a rust implementation of decision diagrams (both
   binary decision diagrams and sentential decision diagrams). RSDD is a
@@ -42,5 +42,11 @@ test-suite rsdd-hs-test
   import:         base
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
+  main-is:        Main.hs
+  build-depends:  rsdd-hs
+
+executable example
+  import:         base
+  hs-source-dirs: examples
   main-is:        Main.hs
   build-depends:  rsdd-hs
