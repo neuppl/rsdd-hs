@@ -27,13 +27,13 @@ module Foreign.RSDD
     bddWmc,
     setWeight,
     varWeight,
-    printBdd
+    printBdd,
   )
 where
 
 import Foreign
-import Foreign.C.Types
 import Foreign.C.String
+import Foreign.C.Types
 import GHC.Natural
 
 -- dummy rust data types
@@ -44,14 +44,15 @@ data RawVarOrder
 data RawCnf
 
 data RawBddPtr
+
 newtype BddBuilder = BddBuilder (Ptr RawRsddBddBuilder)
 
 newtype VarOrder = VarOrder (Ptr RawVarOrder)
 
 newtype Cnf = Cnf (Ptr RawCnf)
 
-
 newtype BddPtr = BddPtr (Ptr RawBddPtr)
+
 newtype VarLabel = VarLabel Natural
 
 -- Call to the Rust function 'var_order_linear' which returns a pointer to a VarOrder structure
@@ -161,7 +162,7 @@ foreign import ccall unsafe "bdd_topvar"
     BddPtr -> IO Word64
 
 topvar :: BddPtr -> IO VarLabel
-topvar ptr = (VarLabel . fromIntegral) <$> c_bdd_topvar ptr
+topvar ptr = VarLabel . fromIntegral <$> c_bdd_topvar ptr
 
 -- Get the low edge of a BDD node
 foreign import ccall unsafe "bdd_low"
@@ -172,7 +173,8 @@ foreign import ccall unsafe "bdd_high"
   high :: BddPtr -> IO BddPtr
 
 data RawRsddWmcParamsR
-newtype WmcParams = WmcParams(Ptr RawRsddWmcParamsR)
+
+newtype WmcParams = WmcParams (Ptr RawRsddWmcParamsR)
 
 foreign import ccall unsafe "new_wmc_params_f64"
   newWmc :: IO WmcParams
@@ -184,7 +186,7 @@ foreign import ccall unsafe "wmc_param_f64_set_weight"
   c_wmc_param_f64_set_weight :: WmcParams -> Word64 -> Double -> Double -> IO ()
 
 setWeight :: WmcParams -> VarLabel -> Double -> Double -> IO ()
-setWeight wmc (VarLabel(n)) l h = c_wmc_param_f64_set_weight wmc (fromIntegral n) l h
+setWeight wmc (VarLabel n) = c_wmc_param_f64_set_weight wmc (fromIntegral n)
 
 data RawRsddWmcWeightR
 
@@ -198,8 +200,10 @@ foreign import ccall unsafe "weight_f64_hi"
   c_weight_f64_hi :: Ptr RawRsddWmcWeightR -> IO Double
 
 varWeight :: WmcParams -> VarLabel -> IO (Double, Double)
-varWeight wmc (VarLabel(v)) = c_wmc_param_f64_var_weight wmc (fromIntegral v) >>= \n ->
-  (,) <$> c_weight_f64_lo n
+varWeight wmc (VarLabel v) =
+  c_wmc_param_f64_var_weight wmc (fromIntegral v) >>= \n ->
+    (,)
+      <$> c_weight_f64_lo n
       <*> c_weight_f64_hi n
 
 foreign import ccall unsafe "print_bdd"
