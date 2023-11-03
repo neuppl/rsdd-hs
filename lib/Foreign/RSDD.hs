@@ -28,6 +28,11 @@ module Foreign.RSDD
     setWeight,
     varWeight,
     printBdd,
+    BddBuilder,
+    VarOrder,
+    Cnf,
+    BddPtr,
+    VarLabel,
   )
 where
 
