@@ -9,9 +9,9 @@ main = do
   printBdd a >>= putStrLn
   b <- newBddPtr mgr False
   printBdd b >>= putStrLn
-  t <- ptrTrue mgr
+  let t = ptrTrue mgr
   ite mgr a b t >>= printBdd >>= putStrLn
   ite mgr t t t >>= printBdd >>= putStrLn
-  wmc <- newWmc
+  let wmc = newWmc
   setWeight wmc l 0.2 0.8
-  varWeight wmc l >>= print
+  print $ varWeight wmc l

@@ -40,6 +40,7 @@ import Foreign
 import Foreign.C.String
 import Foreign.C.Types
 import GHC.Natural
+import System.IO.Unsafe
 
 -- dummy rust data types
 data RawRsddBddBuilder
@@ -66,8 +67,8 @@ foreign import ccall unsafe "var_order_linear"
     CSize -> IO VarOrder
 
 -- return a variable order for a given number of variables
-varOrderLinear :: Natural -> IO VarOrder
-varOrderLinear numVars = c_var_order_linear (fromIntegral numVars)
+varOrderLinear :: Natural -> VarOrder
+varOrderLinear numVars = unsafePerformIO $ c_var_order_linear (fromIntegral numVars)
 
 -- -- Call to the Rust function 'cnf_from_dimacs' which takes a C string and returns a pointer to a Cnf structure
 -- foreign import ccall unsafe "cnf_from_dimacs" c_cnf_from_dimacs
@@ -133,56 +134,53 @@ foreign import ccall unsafe "bdd_negate"
 
 -- checks if the BddPtr is a constant and is PtrTrue
 foreign import ccall unsafe "bdd_is_true"
-  isTrue ::
-    BddPtr -> IO Bool
+  isTrue :: BddPtr -> Bool
 
 -- checks if the BddPtr is a constant and is PtrFalse
 foreign import ccall unsafe "bdd_is_false"
-  isFalse ::
-    BddPtr -> IO Bool
+  isFalse :: BddPtr -> Bool
 
 -- checks if the BddPtr is a constant (meaning either PtrTrue or PtrFalse)
 foreign import ccall unsafe "bdd_is_const"
-  isConst ::
-    BddPtr -> IO Bool
+  isConst :: BddPtr -> Bool
 
 -- Create constant BDD nodes of True
 foreign import ccall unsafe "bdd_true"
-  ptrTrue ::
-    BddBuilder -> IO BddPtr
+  ptrTrue :: BddBuilder -> BddPtr
 
 -- Create constant BDD nodes of False
 foreign import ccall unsafe "bdd_false"
-  ptrFalse ::
-    BddBuilder -> IO BddPtr
+  ptrFalse :: BddBuilder -> BddPtr
 
 -- Compare two BDD nodes for equality
 foreign import ccall unsafe "bdd_eq"
-  bddEq ::
-    BddBuilder -> BddPtr -> BddPtr -> IO Bool
+  bddEq :: BddBuilder -> BddPtr -> BddPtr -> Bool
 
 -- Get the top variable of a BDD node
 foreign import ccall unsafe "bdd_topvar"
   c_bdd_topvar ::
     BddPtr -> IO Word64
 
-topvar :: BddPtr -> IO VarLabel
-topvar ptr = VarLabel . fromIntegral <$> c_bdd_topvar ptr
+topvar :: BddPtr -> VarLabel
+topvar ptr = unsafePerformIO $ VarLabel . fromIntegral <$> c_bdd_topvar ptr
 
 -- Get the low edge of a BDD node
 foreign import ccall unsafe "bdd_low"
-  low :: BddPtr -> IO BddPtr
+  low :: BddPtr -> BddPtr
 
 -- Get the high edge of a BDD node
 foreign import ccall unsafe "bdd_high"
-  high :: BddPtr -> IO BddPtr
+  high :: BddPtr -> BddPtr
 
 data RawRsddWmcParamsR
 
 newtype WmcParams = WmcParams (Ptr RawRsddWmcParamsR)
 
 foreign import ccall unsafe "new_wmc_params_f64"
-  newWmc :: IO WmcParams
+  newWmc :: WmcParams
+
+-- newWmc :: WmcParams
+-- newWmc = unsafePerformIO . newWmcIO
 
 foreign import ccall unsafe "bdd_wmc"
   bddWmc :: BddPtr -> WmcParams -> Double
@@ -204,8 +202,8 @@ foreign import ccall unsafe "weight_f64_lo"
 foreign import ccall unsafe "weight_f64_hi"
   c_weight_f64_hi :: Ptr RawRsddWmcWeightR -> IO Double
 
-varWeight :: WmcParams -> VarLabel -> IO (Double, Double)
-varWeight wmc (VarLabel v) =
+varWeight :: WmcParams -> VarLabel -> (Double, Double)
+varWeight wmc (VarLabel v) = unsafePerformIO $
   c_wmc_param_f64_var_weight wmc (fromIntegral v) >>= \n ->
     (,)
       <$> c_weight_f64_lo n
@@ -216,6 +214,9 @@ foreign import ccall unsafe "print_bdd"
 
 printBdd :: BddPtr -> IO String
 printBdd ptr = c_print_bdd ptr >>= peekCString
+
+instance Show BddPtr where
+  show = unsafePerformIO . printBdd
 
 -------------------------
 
