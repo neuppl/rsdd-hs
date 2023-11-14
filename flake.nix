@@ -6,11 +6,13 @@
     treefmt-nix.url = "github:numtide/treefmt-nix";
     treefmt-nix.inputs.nixpkgs.follows = "nixpkgs";
 
-    rsdd.url = "github:stites/rsdd/13c28b4?dir=nix";
+    rsdd.url = "github:stites/rsdd/4969c0c?dir=nix";
+    #rsdd.url = "path:/home/stites/git/rust/rsdd-ng/nix";
 
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-root.url = "github:srid/flake-root";
     mission-control.url = "github:Platonic-Systems/mission-control";
+    cachix-push.url = "github:juspay/cachix-push";
   };
 
   outputs = inputs:
@@ -21,11 +23,14 @@
         inputs.treefmt-nix.flakeModule
         inputs.flake-root.flakeModule
         inputs.mission-control.flakeModule
+        inputs.cachix-push.flakeModule
       ];
       perSystem = { inputs', self', system, lib, config, pkgs, ... }: {
+        cachix-push.cacheName = "stites";
         packages = {
           default = self'.packages.rsdd-hs;
-          rsdd = inputs.rsdd.packages.${system}.rsdd.overrideAttrs (old: {
+          rsdd = inputs'.rsdd.packages.rsdd.overrideAttrs (old: {
+          #rsdd = (pkgs.callPackage ./rsdd/nix {}).overrideAttrs (old: {
             # getting a lot of thrash on the API -- might as well disable this for now.
             doCheck = false;
           });

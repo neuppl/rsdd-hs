@@ -38,6 +38,7 @@ module Foreign.RSDD
     VarLabel,
     WmcParams,
     WmcParamsT,
+    mkTypedWmcParams,
     WmcParams1,
     Weight(..),
   )
@@ -75,6 +76,9 @@ newtype VarLabel = VarLabel Natural
 newtype WmcParams = WmcParams (Ptr RawRsddWmcParamsR)
 
 newtype WmcParamsT (m :: Nat) = WmcParamsT { unbound :: WmcParams }
+
+mkTypedWmcParams :: WmcParams -> WmcParamsT (m :: Nat)
+mkTypedWmcParams wmc = WmcParamsT wmc
 
 type WmcParams1 = WmcParamsT 1
 
@@ -192,17 +196,8 @@ foreign import ccall unsafe "bdd_high"
 foreign import ccall unsafe "new_wmc_params_f64"
   newWmc :: WmcParams
 
--- newWmc :: WmcParams
--- newWmc = unsafePerformIO . newWmcIO
-
 foreign import ccall unsafe "bdd_wmc"
-  c_bddWmc :: BddBuilder -> BddPtr -> Word64 -> WmcParams -> Double
-
-bddWmc :: BddBuilder -> BddPtr -> Natural -> WmcParams -> Double
-bddWmc mgr b n wmc = c_bddWmc mgr b (fromIntegral n) wmc
-
-foreign import ccall unsafe "bdd_unsmoothed_wmc"
-  bddUnsmoothedWmc :: BddPtr -> WmcParams -> Double
+  bddWmc :: BddPtr -> WmcParams -> Double
 
 foreign import ccall unsafe "wmc_param_f64_set_weight"
   c_wmc_param_f64_set_weight :: WmcParams -> Word64 -> Double -> Double -> IO ()
