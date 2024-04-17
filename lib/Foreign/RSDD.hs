@@ -12,6 +12,7 @@ module Foreign.RSDD
     newVar,
     newBddPtr,
     ite,
+    iff,
     bddAnd,
     bddOr,
     bddNeg,
@@ -137,6 +138,10 @@ newBddPtr mgr pol = snd <$> newVar mgr pol
 foreign import ccall unsafe "bdd_ite"
   ite ::
     BddBuilder -> BddPtr -> BddPtr -> BddPtr -> IO BddPtr
+
+-- BDD operations: if and only if
+iff :: BddBuilder -> BddPtr -> BddPtr -> IO BddPtr
+iff m f g = bddNeg m g >>= ite m f g
 
 -- BDD operations: And
 foreign import ccall unsafe "bdd_and"
