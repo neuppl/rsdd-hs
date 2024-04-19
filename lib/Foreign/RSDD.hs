@@ -27,9 +27,13 @@ module Foreign.RSDD
     high,
     newWmc,
     bddWmc,
+    wmc,
+    wmc1,
     setWeight,
     setHigh,
+    setHighP,
     setLow,
+    setLowP,
     varWeight,
     printBdd,
     BddBuilder,
@@ -79,7 +83,7 @@ newtype WmcParams = WmcParams (Ptr RawRsddWmcParamsR)
 newtype WmcParamsT (m :: Nat) = WmcParamsT { unbound :: WmcParams }
 
 mkTypedWmcParams :: WmcParams -> WmcParamsT (m :: Nat)
-mkTypedWmcParams wmc = WmcParamsT wmc
+mkTypedWmcParams wm = WmcParamsT wm
 
 type WmcParams1 = WmcParamsT 1
 
@@ -204,6 +208,19 @@ foreign import ccall unsafe "new_wmc_params_f64"
 foreign import ccall unsafe "bdd_wmc"
   bddWmc :: BddPtr -> WmcParams -> Double
 
+type Accept = BddPtr
+
+wmc :: BddBuilder -> WmcParams -> [BddPtr] -> Accept -> [Double]
+wmc m w qs a = unsafePerformIO $ do
+  ns :: [BddPtr] <- mapM (bddAnd m a) qs
+  pure $ fmap (\n -> bddWmc n w / z) ns
+  where
+      z = bddWmc a w
+
+wmc1 :: BddBuilder -> WmcParams -> BddPtr -> Accept -> Double
+wmc1 m w q a = head $ wmc m w [q] a
+
+
 foreign import ccall unsafe "wmc_param_f64_set_weight"
   c_wmc_param_f64_set_weight :: WmcParams -> Word64 -> Double -> Double -> IO ()
 
@@ -213,19 +230,31 @@ data Weight = Weight
   } deriving (Show, Eq, Ord)
 
 setWeight :: WmcParams -> VarLabel -> Weight -> IO ()
-setWeight wmc (VarLabel n) w = c_wmc_param_f64_set_weight wmc (fromIntegral n) (lo w) (hi w)
+setWeight wm (VarLabel n) w = c_wmc_param_f64_set_weight wm (fromIntegral n) (lo w) (hi w)
 
 setHigh :: forall mx . KnownNat mx => WmcParamsT mx -> VarLabel -> Double -> IO ()
-setHigh wmc vl hi = setWeight (unbound wmc) vl (Weight (x-hi) hi)
+setHigh wm vl hi = setWeight (unbound wm) vl (Weight (x-hi) hi)
   where
     x :: Double
     x = fromIntegral $ natVal (Proxy @mx)
 
+setHighP :: WmcParams -> VarLabel -> Double -> IO ()
+setHighP w = setHigh wm
+  where
+    wm :: WmcParamsT 1
+    wm = mkTypedWmcParams w
+
 setLow :: forall mx . KnownNat mx => WmcParamsT mx -> VarLabel -> Double -> IO ()
-setLow wmc vl lo = setWeight (unbound wmc) vl (Weight lo (x-lo))
+setLow wm vl lo = setWeight (unbound wm) vl (Weight lo (x-lo))
   where
     x :: Double
     x = fromIntegral $ natVal (Proxy @mx)
+
+setLowP :: WmcParams -> VarLabel -> Double -> IO ()
+setLowP w = setLow wm
+  where
+    wm :: WmcParamsT 1
+    wm = mkTypedWmcParams w
 
 data RawRsddWmcWeightR
 
@@ -239,8 +268,8 @@ foreign import ccall unsafe "weight_f64_hi"
   c_weight_f64_hi :: Ptr RawRsddWmcWeightR -> IO Double
 
 varWeight :: WmcParams -> VarLabel -> Weight
-varWeight wmc (VarLabel v) = unsafePerformIO $
-  c_wmc_param_f64_var_weight wmc (fromIntegral v) >>= \n ->
+varWeight wm (VarLabel v) = unsafePerformIO $
+  c_wmc_param_f64_var_weight wm (fromIntegral v) >>= \n ->
     Weight
       <$> c_weight_f64_lo n
       <*> c_weight_f64_hi n
