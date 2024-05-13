@@ -21,6 +21,7 @@ module Foreign.RSDD
     isConst,
     ptrTrue,
     ptrFalse,
+    Foreign.RSDD.fromBool,
     bddEq,
     topvar,
     low,
@@ -181,6 +182,10 @@ foreign import ccall unsafe "bdd_true"
 -- Create constant BDD nodes of False
 foreign import ccall unsafe "bdd_false"
   ptrFalse :: BddBuilder -> BddPtr
+
+fromBool :: BddBuilder -> Bool -> BddPtr
+fromBool mgr True = ptrTrue mgr
+fromBool mgr False = ptrFalse mgr
 
 -- Compare two BDD nodes for equality
 foreign import ccall unsafe "bdd_eq"
