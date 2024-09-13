@@ -1,7 +1,7 @@
 {-# LANGUAGE CApiFFI #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE DataKinds #-}
-
+{-# LANGUAGE Strict #-}
 module Foreign.RSDD
   ( varOrderLinear,
     -- , cnfFromDimacs
@@ -11,6 +11,7 @@ module Foreign.RSDD
     roBddBuilderDefaultOrder,
     newVar,
     newBddPtr,
+    bddVar,
     ite,
     iff,
     bddAnd,
@@ -28,6 +29,7 @@ module Foreign.RSDD
     high,
     newWmc,
     bddWmc,
+    Accept(..),
     wmc,
     wmc1,
     setWeight,
@@ -41,7 +43,7 @@ module Foreign.RSDD
     VarOrder,
     Cnf,
     BddPtr,
-    VarLabel,
+    VarLabel(..),
     WmcParams,
     WmcParamsT,
     mkTypedWmcParams,
@@ -57,6 +59,7 @@ import GHC.Natural
 import GHC.TypeNats
 import Data.Proxy
 import System.IO.Unsafe
+import Control.Monad.IO.Class
 
 -- dummy rust data types
 data RawRsddBddBuilder
@@ -113,16 +116,16 @@ foreign import ccall unsafe "robdd_model_count"
   c_robdd_model_count ::
     BddBuilder -> BddPtr -> IO Word64
 
-modelCount :: BddBuilder -> BddPtr -> IO Natural
-modelCount mgr ptr = fromIntegral <$> c_robdd_model_count mgr ptr
+modelCount :: BddBuilder -> BddPtr -> Natural
+modelCount mgr ptr = unsafePerformIO $ fromIntegral <$> c_robdd_model_count mgr ptr
 
 -- Creates a new BDD builder with a default variable order
 foreign import ccall unsafe "mk_bdd_manager_default_order"
   c_mk_bdd_manager_default_order ::
     Word64 -> IO BddBuilder
 
-roBddBuilderDefaultOrder :: Natural -> IO BddBuilder
-roBddBuilderDefaultOrder n = c_mk_bdd_manager_default_order (fromIntegral n)
+roBddBuilderDefaultOrder :: MonadIO io => Natural -> io BddBuilder
+roBddBuilderDefaultOrder n = liftIO $ c_mk_bdd_manager_default_order (fromIntegral n)
 
 foreign import ccall unsafe "bdd_new_label"
   c_bdd_new_label :: BddBuilder -> IO Word64
@@ -130,38 +133,58 @@ foreign import ccall unsafe "bdd_new_label"
 foreign import ccall unsafe "bdd_var"
   c_bdd_var :: BddBuilder -> Word64 -> Bool -> IO BddPtr
 
-newVar :: BddBuilder -> Bool -> IO (VarLabel, BddPtr)
-newVar mgr pol = do
+bddVar :: MonadIO io => BddBuilder -> VarLabel -> Bool -> io BddPtr
+bddVar mgr (VarLabel lbl) pol = liftIO $ c_bdd_var mgr (fromIntegral lbl) pol
+
+-- getOrCreate :: MonadIO io => BddBuilder -> VarLabel -> io BddPtr
+-- getOrCreate mgr (VarLabel lbl) =
+--   c_bdd_var mgr (fromIntegral lbl) True
+
+
+newVar :: MonadIO io => BddBuilder -> Bool -> io (VarLabel, BddPtr)
+newVar mgr pol = liftIO $ do
   lbl <- c_bdd_new_label mgr
   ptr <- c_bdd_var mgr lbl pol
   pure ((VarLabel . fromIntegral) lbl, ptr)
 
-newBddPtr :: BddBuilder -> Bool -> IO BddPtr
+newBddPtr :: MonadIO io => BddBuilder -> Bool -> io BddPtr
 newBddPtr mgr pol = snd <$> newVar mgr pol
 
 -- BDD operations: If-Then-Else
 foreign import ccall unsafe "bdd_ite"
-  ite ::
+  bdd_ite ::
     BddBuilder -> BddPtr -> BddPtr -> BddPtr -> IO BddPtr
 
+ite :: MonadIO io => BddBuilder -> BddPtr -> BddPtr -> BddPtr -> io BddPtr
+ite a b c d = liftIO $ bdd_ite a b c d
+
 -- BDD operations: if and only if
-iff :: BddBuilder -> BddPtr -> BddPtr -> IO BddPtr
+iff :: MonadIO io => BddBuilder -> BddPtr -> BddPtr -> io BddPtr
 iff m f g = bddNeg m g >>= ite m f g
 
 -- BDD operations: And
 foreign import ccall unsafe "bdd_and"
-  bddAnd ::
+  bdd_and ::
     BddBuilder -> BddPtr -> BddPtr -> IO BddPtr
+
+bddAnd :: MonadIO io => BddBuilder -> BddPtr -> BddPtr -> io BddPtr
+bddAnd a b c = liftIO $ bdd_and a b c
 
 -- BDD operations: Or
 foreign import ccall unsafe "bdd_or"
-  bddOr ::
+  bdd_or ::
     BddBuilder -> BddPtr -> BddPtr -> IO BddPtr
+
+bddOr :: MonadIO io => BddBuilder -> BddPtr -> BddPtr -> io BddPtr
+bddOr a b c = liftIO $ bdd_or a b c
 
 -- BDD operations: Negate
 foreign import ccall unsafe "bdd_negate"
-  bddNeg ::
+  bdd_neg ::
     BddBuilder -> BddPtr -> IO BddPtr
+
+bddNeg :: MonadIO io => BddBuilder -> BddPtr -> io BddPtr
+bddNeg a b = liftIO $ bdd_neg a b
 
 -- checks if the BddPtr is a constant and is PtrTrue
 foreign import ccall unsafe "bdd_is_true"
@@ -213,14 +236,14 @@ foreign import ccall unsafe "new_wmc_params_f64"
 foreign import ccall unsafe "bdd_wmc"
   bddWmc :: BddPtr -> WmcParams -> Double
 
-type Accept = BddPtr
+newtype Accept = Accept { accepting :: BddPtr }
 
 wmc :: BddBuilder -> WmcParams -> [BddPtr] -> Accept -> [Double]
 wmc m w qs a = unsafePerformIO $ do
-  ns :: [BddPtr] <- mapM (bddAnd m a) qs
+  ns :: [BddPtr] <- mapM (bddAnd m $ accepting a) qs
   pure $ fmap (\n -> bddWmc n w / z) ns
   where
-      z = bddWmc a w
+      z = bddWmc (accepting a) w
 
 wmc1 :: BddBuilder -> WmcParams -> BddPtr -> Accept -> Double
 wmc1 m w q a = head $ wmc m w [q] a
@@ -234,28 +257,36 @@ data Weight = Weight
   , hi :: Double
   } deriving (Show, Eq, Ord)
 
-setWeight :: WmcParams -> VarLabel -> Weight -> IO ()
-setWeight wm (VarLabel n) w = c_wmc_param_f64_set_weight wm (fromIntegral n) (lo w) (hi w)
+set_weight :: WmcParams -> VarLabel -> Weight -> IO ()
+set_weight wm (VarLabel n) w = c_wmc_param_f64_set_weight wm (fromIntegral n) (lo w) (hi w)
+setWeight :: MonadIO io => WmcParams -> VarLabel -> Weight -> io ()
+setWeight a b c = liftIO $ set_weight a b c
 
-setHigh :: forall mx . KnownNat mx => WmcParamsT mx -> VarLabel -> Double -> IO ()
-setHigh wm vl hi = setWeight (unbound wm) vl (Weight (x-hi) hi)
+set_high :: forall mx . KnownNat mx => WmcParamsT mx -> VarLabel -> Double -> IO ()
+set_high wm vl hi = set_weight (unbound wm) vl (Weight (x-hi) hi)
   where
     x :: Double
     x = fromIntegral $ natVal (Proxy @mx)
 
-setHighP :: WmcParams -> VarLabel -> Double -> IO ()
+setHigh :: forall mx io . KnownNat mx => MonadIO io => WmcParamsT mx -> VarLabel -> Double -> io ()
+setHigh wm vl hi = liftIO $ set_high wm vl hi
+
+setHighP :: MonadIO io => WmcParams -> VarLabel -> Double -> io ()
 setHighP w = setHigh wm
   where
     wm :: WmcParamsT 1
     wm = mkTypedWmcParams w
 
-setLow :: forall mx . KnownNat mx => WmcParamsT mx -> VarLabel -> Double -> IO ()
-setLow wm vl lo = setWeight (unbound wm) vl (Weight lo (x-lo))
+set_low :: forall mx . KnownNat mx => WmcParamsT mx -> VarLabel -> Double -> IO ()
+set_low wm vl lo = set_weight (unbound wm) vl (Weight lo (x-lo))
   where
     x :: Double
     x = fromIntegral $ natVal (Proxy @mx)
 
-setLowP :: WmcParams -> VarLabel -> Double -> IO ()
+setLow :: forall mx io . KnownNat mx => MonadIO io => WmcParamsT mx -> VarLabel -> Double -> io ()
+setLow wm vl hi = liftIO $ set_low wm vl hi
+
+setLowP :: MonadIO io => WmcParams -> VarLabel -> Double -> io ()
 setLowP w = setLow wm
   where
     wm :: WmcParamsT 1
@@ -282,8 +313,11 @@ varWeight wm (VarLabel v) = unsafePerformIO $
 foreign import ccall unsafe "print_bdd"
   c_print_bdd :: BddPtr -> IO CString
 
-printBdd :: BddPtr -> IO String
-printBdd ptr = c_print_bdd ptr >>= peekCString
+print_bdd :: BddPtr -> IO String
+print_bdd ptr = c_print_bdd ptr >>= peekCString
+
+printBdd :: MonadIO io => BddPtr -> io String
+printBdd = liftIO . print_bdd
 
 instance Show BddPtr where
   show = unsafePerformIO . printBdd

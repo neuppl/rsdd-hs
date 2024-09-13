@@ -30,7 +30,8 @@ extra-doc-files: CHANGELOG.org
 common base
   default-language: GHC2021
   ghc-options:      -Wall
-  build-depends:    base ^>=4.17.0.0
+  build-depends:    base
+                 -- base ^>=4.17.0.0
 
 library
   import:          base

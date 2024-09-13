@@ -25,6 +25,11 @@
         inputs.mission-control.flakeModule
         inputs.cachix-push.flakeModule
       ];
+      flake.haskellFlakeProjectModules.default = { ... }: {
+        #packages = {
+        #  #rsdd-hs.source = ;
+        #};
+      };
       perSystem = { inputs', self', system, lib, config, pkgs, ... }: {
         cachix-push.cacheName = "stites";
         packages = {
